@@ -26,3 +26,4 @@ jobs:
           name: myapp-apk
           path: bin/*.apk
           if-no-files-found: warn
+          
