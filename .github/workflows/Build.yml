@@ -23,20 +23,31 @@ jobs:
             zlib1g-dev libncurses5-dev \
             libncursesw5-dev cmake \
             libffi-dev libssl-dev \
-            build-essential ccache
+            build-essential ccache \
+            lld
 
       - name: Accept Android SDK licenses
         run: |
           mkdir -p $HOME/.android
           touch $HOME/.android/repositories.cfg
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;37.0.0" || true
 
-      - name: Install Buildozer
+      - name: Install Buildozer with fixed hostpython
         run: |
           pip install --upgrade pip
-          pip install cython==0.29.36
-          pip install buildozer==1.5.0
+          pip install "cython==0.29.36"
+          pip install "buildozer==1.5.0"
+          pip install "python-for-android==2023.9.16"
+
+      - name: Force hostpython3 version pin
+        run: |
+          # منع Buildozer من بناء hostpython3.14
+          P4A_PATH=$(python -c "import pythonforandroid; import os; print(os.path.dirname(pythonforandroid.__file__))")
+          RECIPE="$P4A_PATH/recipes/hostpython3/__init__.py"
+          echo "📁 Recipe path: $RECIPE"
+          # تثبيت نسخة hostpython على 3.10.14
+          sed -i 's/version = .*/version = "3.10.14"/' "$RECIPE" || true
+          grep "version" "$RECIPE" | head -3
 
       - name: Build APK
         run: |
