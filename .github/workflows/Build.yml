@@ -6,12 +6,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build APK with Docker
+      - name: Accept SDK licenses and Build
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/home/user/hostcwd \
             kivy/buildozer:latest \
-            android debug
+            sh -c "
+              mkdir -p /root/.android && \
+              touch /root/.android/repositories.cfg && \
+              yes | sdkmanager --licenses 2>/dev/null || true && \
+              yes | sdkmanager 'build-tools;37.0.0' 2>/dev/null || true && \
+              cd /home/user/hostcwd && \
+              yes | buildozer android debug
+            "
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
