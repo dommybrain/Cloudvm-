@@ -8,10 +8,8 @@ source.include_exts = py,png,jpg,kv,atlas
 
 version = 4.2
 # التعديل الأهم: تحديد إصدارات دقيقة لـ Kivy و KivyMD متوافقة مع الأندرويد، مع إضافة حزم تشفير الاتصالات
-requirements = python3, kivy==2.3.0, kivymd==1.2.0, requests, certifi, urllib3, charset-normalizer, idna, openssl, pyopenssl
-
-orientation = portrait
-osx.kivy_version = 2.3.0
+requirements = python3,kivy==2.2.1,kivymd==1.1.1,requests,certifi,urllib3,charset-normalizer,idna,openssl,pyopensslorientation = portrait
+osx.kivy_version = 2.2.1
 fullscreen = 0
 
 # الصلاحيات الكاملة للاتصال بالإنترنت وقراءة وحفظ ملف التقرير hits.txt
