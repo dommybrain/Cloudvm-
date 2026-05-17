@@ -14,7 +14,12 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             mybuilder \
-            bash -c "cd /app && yes | buildozer android debug"
+            bash -c "
+              pip3 install legacy-cgi 2>/dev/null || true && \
+              find / -name '_tempita.py' 2>/dev/null | \
+              xargs sed -i 's/^import cgi/try:\n    import cgi\nexcept ImportError:\n    import html as cgi/' 2>/dev/null || true && \
+              cd /app && yes | buildozer android debug
+            "
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
