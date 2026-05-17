@@ -8,7 +8,6 @@ source.include_exts = py,png,jpg,kv,atlas
 
 version = 4.2
 
-# STABLE MINIMAL DEPENDENCIES
 requirements = python3, kivy, requests, certifi, urllib3, charset-normalizer, idna
 
 orientation = portrait
