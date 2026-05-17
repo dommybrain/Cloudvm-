@@ -1,51 +1,51 @@
-name: Build APK
+name: Buildozer APK (Docker Stable)
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    container:
+      image: kivy/buildozer:latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout project
+      uses: actions/checkout@v3
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Fix system packages
+      run: |
+        apt update
+        apt install -y git zip unzip openjdk-17-jdk wget
 
-      - name: Install dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk build-essential \
-          autoconf libtool pkg-config zlib1g-dev libffi-dev libssl-dev
+    - name: Clean buildozer cache
+      run: |
+        buildozer android clean || true
+        rm -rf .buildozer
 
-      - name: Install Buildozer
-        run: |
-          pip install --upgrade pip
-          pip install cython==0.29.36 buildozer
+    - name: Install Android SDK components (FIX AIDL)
+      run: |
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk
+        export ANDROIDSDK=$HOME/.buildozer/android/platform/android-sdk
+        export PATH=$ANDROIDSDK/cmdline-tools/latest/bin:$PATH
 
-      # 🔥 IMPORTANT FIX
-      - name: Pre-create buildozer config
-        run: |
-          buildozer init || true
+        wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmd.zip
+        unzip cmd.zip -d sdk
 
-      - name: Force SDK download fix
-        run: |
-          mkdir -p ~/.buildozer
-          echo "[app]" > buildozer.spec
-          echo "android.accept_sdk_license = True" >> buildozer.spec
+        mkdir -p $ANDROIDSDK/cmdline-tools
+        mv sdk/cmdline-tools $ANDROIDSDK/cmdline-tools/latest
 
-      - name: Build APK
-        run: |
-          buildozer -v android debug
+        yes | $ANDROIDSDK/cmdline-tools/latest/bin/sdkmanager \
+          "platform-tools" \
+          "platforms;android-33" \
+          "build-tools;33.0.2"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk
-          path: bin/*.apk
+    - name: Accept licenses
+      run: |
+        yes | $ANDROIDSDK/cmdline-tools/latest/bin/sdkmanager --licenses
+
+    - name: Build APK
+      run: |
+        buildozer -v android debug
