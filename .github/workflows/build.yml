@@ -6,12 +6,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build APK with Docker
+      - name: Build Docker image
+        run: docker build -t mybuilder .
+
+      - name: Build APK
         run: |
           docker run --rm \
-            -v ${{ github.workspace }}:/home/user/hostcwd \
-            kivy/buildozer:latest \
-            android debug
+            -v ${{ github.workspace }}:/app \
+            mybuilder \
+            bash -c "cd /app && yes | buildozer android debug"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
