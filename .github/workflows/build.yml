@@ -1,4 +1,4 @@
-name: Buildozer APK (FIXED)
+name: Buildozer APK Stable
 
 on:
   push:
@@ -12,26 +12,25 @@ jobs:
       image: kivy/buildozer:latest
 
     steps:
-    - name: Checkout
+    - name: Checkout project
       uses: actions/checkout@v3
 
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         apt update
-        apt install -y wget unzip git openjdk-17-jdk
+        apt install -y git zip unzip wget openjdk-17-jdk
 
-    - name: Setup Android SDK (FIXED PATH)
+    - name: Setup Android SDK (FIX AIDL)
       run: |
         export ANDROID_HOME=$HOME/android-sdk
         mkdir -p $ANDROID_HOME
 
         cd $HOME
-
         wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmd.zip
-        unzip cmd.zip -d cmdline-tools-temp
+        unzip cmd.zip -d cmdtools
 
         mkdir -p $ANDROID_HOME/cmdline-tools
-        mv cmdline-tools-temp/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+        mv cmdtools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
 
         export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
@@ -40,13 +39,16 @@ jobs:
           "platforms;android-33" \
           "build-tools;33.0.2"
 
-    - name: Accept licenses (FIXED)
+    - name: Accept licenses
       run: |
         export ANDROID_HOME=$HOME/android-sdk
         export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
 
         yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
 
-    - name: Build APK
+    - name: Build APK (NO ROOT PROMPT FIX)
       run: |
-        buildozer android debug
+        export BUILDDOZER_WARN_ON_ROOT=0
+        export PIP_ROOT_USER_ACTION=ignore
+
+        buildozer android debug --verbose --allow-root
