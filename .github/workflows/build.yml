@@ -1,4 +1,4 @@
-name: Buildozer APK Stable
+name: Buildozer APK Stable Fix
 
 on:
   push:
@@ -12,15 +12,15 @@ jobs:
       image: kivy/buildozer:latest
 
     steps:
-    - name: Checkout project
+    - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install system dependencies
+    - name: Install system deps
       run: |
         apt update
         apt install -y git zip unzip wget openjdk-17-jdk
 
-    - name: Setup Android SDK (FIX AIDL)
+    - name: Setup Android SDK (AIDL FIX)
       run: |
         export ANDROID_HOME=$HOME/android-sdk
         mkdir -p $ANDROID_HOME
@@ -48,7 +48,19 @@ jobs:
 
     - name: Build APK (NO ROOT PROMPT FIX)
       run: |
-        export BUILDDOZER_WARN_ON_ROOT=0
         export PIP_ROOT_USER_ACTION=ignore
+        export BUILDDOZER_WARN_ON_ROOT=0
+        export DEBIAN_FRONTEND=noninteractive
 
-        buildozer android debug --verbose --allow-root
+        python - << 'EOF'
+import subprocess, os
+
+os.environ["PIP_ROOT_USER_ACTION"] = "ignore"
+os.environ["BUILDDOZER_WARN_ON_ROOT"] = "0"
+os.environ["DEBIAN_FRONTEND"] = "noninteractive"
+
+subprocess.run(
+    ["buildozer", "android", "debug", "--verbose"],
+    input=b"y\n",
+)
+EOF
