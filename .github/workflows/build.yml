@@ -1,4 +1,4 @@
-name: Buildozer APK (Docker Stable)
+name: Buildozer APK (FIXED)
 
 on:
   push:
@@ -12,40 +12,41 @@ jobs:
       image: kivy/buildozer:latest
 
     steps:
-    - name: Checkout project
+    - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Fix system packages
+    - name: Install dependencies
       run: |
         apt update
-        apt install -y git zip unzip openjdk-17-jdk wget
+        apt install -y wget unzip git openjdk-17-jdk
 
-    - name: Clean buildozer cache
+    - name: Setup Android SDK (FIXED PATH)
       run: |
-        buildozer android clean || true
-        rm -rf .buildozer
+        export ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME
 
-    - name: Install Android SDK components (FIX AIDL)
-      run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk
-        export ANDROIDSDK=$HOME/.buildozer/android/platform/android-sdk
-        export PATH=$ANDROIDSDK/cmdline-tools/latest/bin:$PATH
+        cd $HOME
 
         wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmd.zip
-        unzip cmd.zip -d sdk
+        unzip cmd.zip -d cmdline-tools-temp
 
-        mkdir -p $ANDROIDSDK/cmdline-tools
-        mv sdk/cmdline-tools $ANDROIDSDK/cmdline-tools/latest
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        mv cmdline-tools-temp/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
 
-        yes | $ANDROIDSDK/cmdline-tools/latest/bin/sdkmanager \
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+
+        yes | sdkmanager --sdk_root=$ANDROID_HOME \
           "platform-tools" \
           "platforms;android-33" \
           "build-tools;33.0.2"
 
-    - name: Accept licenses
+    - name: Accept licenses (FIXED)
       run: |
-        yes | $ANDROIDSDK/cmdline-tools/latest/bin/sdkmanager --licenses
+        export ANDROID_HOME=$HOME/android-sdk
+        export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+
+        yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
 
     - name: Build APK
       run: |
-        buildozer -v android debug
+        buildozer android debug
