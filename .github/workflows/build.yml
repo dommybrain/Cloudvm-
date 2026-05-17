@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build APK Stable
 
 on:
   push:
@@ -13,21 +13,14 @@ jobs:
       options: --user root
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Clean old builds
-        run: |
-          rm -rf .buildozer bin
+        run: rm -rf .buildozer bin
 
-      - name: Fix environment
-        run: |
-          export BUILDOZER_ALLOW_ROOT=1
-          export PIP_ROOT_USER_ACTION=ignore
-
-      - name: Build APK
-        run: |
-          yes | buildozer -v android debug
+      - name: Build APK (stable mode)
+        run: yes | buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
