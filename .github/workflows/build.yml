@@ -44,7 +44,7 @@ jobs:
 
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
-      - name: Clean old Buildozer cache
+      - name: Clean old caches
         run: |
           rm -rf .buildozer
           rm -rf ~/.buildozer
@@ -57,23 +57,53 @@ jobs:
             setuptools \
             wheel
 
-      - name: Install Buildozer and python-for-android
+      - name: Install Buildozer stack
         run: |
           pip install \
             buildozer==1.5.0 \
             cython==0.29.36 \
             virtualenv
 
-          pip install \
-            https://github.com/kivy/python-for-android/archive/refs/heads/master.zip
+      - name: Clone python-for-android manually
+        run: |
+          mkdir -p .buildozer/android/platform
 
-      - name: Verify installed versions
+          git clone \
+            https://github.com/kivy/python-for-android.git \
+            .buildozer/android/platform/python-for-android
+
+      - name: Generate debug keystore automatically
+        run: |
+          keytool -genkeypair \
+            -v \
+            -keystore debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+
+      - name: Configure buildozer signing
+        run: |
+          echo "" >> buildozer.spec
+          echo "android.release_artifact = apk" >> buildozer.spec
+          echo "android.debug = 1" >> buildozer.spec
+          echo "android.release_keystore = debug.keystore" >> buildozer.spec
+          echo "android.release_keyalias = androiddebugkey" >> buildozer.spec
+          echo "android.release_keystore_passwd = android" >> buildozer.spec
+          echo "android.release_keyalias_passwd = android" >> buildozer.spec
+
+      - name: Verify installations
         run: |
           python --version
 
           pip show buildozer
           pip show cython
-          pip show python-for-android
+
+          ls -la .buildozer/android/platform/
+          ls -la .buildozer/android/platform/python-for-android
 
       - name: Build APK
         env:
@@ -85,6 +115,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: myapp-apk
+          name: apk
           path: bin/*.apk
           if-no-files-found: warn
