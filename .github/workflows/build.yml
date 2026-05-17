@@ -1,4 +1,4 @@
-name: Build Signed APK (PRO)
+name: Build Android APK
 
 on:
   push:
@@ -10,21 +10,27 @@ jobs:
 
     container:
       image: kivy/buildozer:latest
+      options: --user root
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean build
+      - name: Clean old builds
         run: |
           rm -rf .buildozer bin
 
-      - name: Build APK (release optimized)
+      - name: Fix environment
         run: |
-          buildozer -v android debug
+          export BUILDOZER_ALLOW_ROOT=1
+          export PIP_ROOT_USER_ACTION=ignore
+
+      - name: Build APK
+        run: |
+          yes | buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: foxyscanner-apk
+          name: apk
           path: bin/*.apk
