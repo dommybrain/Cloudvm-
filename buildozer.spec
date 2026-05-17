@@ -1,29 +1,29 @@
 [app]
-title = Foxy Scanner Pro
-package.name = foxyscanner
-package.domain = org.foxy
+title = IPTV MAC Scanner PRO
+package.name = iptvscanner
+package.domain = org.example
 
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas
+source.include_exts = py,kv,png,jpg
 
-version = 4.2
+version = 1.0
 
-requirements = python3, kivy, requests, certifi, urllib3, charset-normalizer, idna
+requirements = python3,kivy,kivymd,requests
 
 orientation = portrait
+
 fullscreen = 0
 
-android.permissions = INTERNET, ACCESS_NETWORK_STATE, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE
 
 android.api = 33
 android.minapi = 21
-android.ndk = 25b
-android.ndk_api = 21
 
 android.archs = arm64-v8a, armeabi-v7a
 
-android.accept_sdk_license = True
+android.allow_backup = True
+
+log_level = 2
 
 [buildozer]
-log_level = 2
 warn_on_root = 1
