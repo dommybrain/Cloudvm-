@@ -15,7 +15,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install system deps
+    - name: Install system dependencies
       run: |
         apt update
         apt install -y git zip unzip wget openjdk-17-jdk
@@ -46,21 +46,10 @@ jobs:
 
         yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
 
-    - name: Build APK (NO ROOT PROMPT FIX)
+    - name: Build APK (FIX ROOT PROMPT)
       run: |
         export PIP_ROOT_USER_ACTION=ignore
         export BUILDDOZER_WARN_ON_ROOT=0
         export DEBIAN_FRONTEND=noninteractive
 
-        python - << 'EOF'
-import subprocess, os
-
-os.environ["PIP_ROOT_USER_ACTION"] = "ignore"
-os.environ["BUILDDOZER_WARN_ON_ROOT"] = "0"
-os.environ["DEBIAN_FRONTEND"] = "noninteractive"
-
-subprocess.run(
-    ["buildozer", "android", "debug", "--verbose"],
-    input=b"y\n",
-)
-EOF
+        yes | buildozer android debug --verbose
