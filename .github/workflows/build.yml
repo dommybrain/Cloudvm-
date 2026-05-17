@@ -1,4 +1,4 @@
-name: Build APK Stable
+name: Build APK Stable Rebuild
 
 on:
   push:
@@ -13,17 +13,24 @@ jobs:
       options: --user root
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Clean old builds
-        run: rm -rf .buildozer bin
+      - name: Clean environment
+        run: |
+          rm -rf .buildozer bin
 
-      - name: Build APK (stable mode)
-        run: yes | buildozer -v android debug
+      - name: Fix permissions
+        run: |
+          export BUILDOZER_ALLOW_ROOT=1
+          export PIP_ROOT_USER_ACTION=ignore
+
+      - name: Build APK
+        run: |
+          yes | buildozer -v android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
+          name: foxyscanner-apk
           path: bin/*.apk
