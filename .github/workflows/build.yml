@@ -1,36 +1,42 @@
-name: Build APK Stable Rebuild
+name: Build APK
 
 on:
   push:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    container:
-      image: kivy/buildozer:latest
-      options: --user root
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Clean environment
-        run: |
-          rm -rf .buildozer bin
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
 
-      - name: Fix permissions
+      - name: Install system dependencies
         run: |
-          export BUILDOZER_ALLOW_ROOT=1
-          export PIP_ROOT_USER_ACTION=ignore
+          sudo apt update
+          sudo apt install -y \
+          git zip unzip openjdk-17-jdk \
+          build-essential \
+          libffi-dev libssl-dev
+
+      - name: Install Buildozer
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython
 
       - name: Build APK
         run: |
-          yes | buildozer -v android debug
+          buildozer android debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: foxyscanner-apk
+          name: apk-build
           path: bin/*.apk
