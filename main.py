@@ -1,7 +1,7 @@
 """
-Professional Stalker Middleware MAC Scanner PRO (Flash Engine v4.8)
+Professional Stalker Middleware MAC Scanner PRO (Flash Engine v5.5)
 Fully Optimized for: KivyMD 1.2.0 + Kivy 2.3.x (Pydroid3 / Android)
-Fixed: Storage path redirected to shared '/sdcard/Download/hits.txt' for easy access.
+Fixed: No File Storage needed. Hits are saved and rendered directly via shared memory.
 """
 
 from kivymd.app import MDApp
@@ -28,14 +28,16 @@ import requests
 import time
 import datetime
 import re
-import os
+import random
 from queue import Queue
 
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# توجيه مسار الحفظ والدخول المشترك إلى مجلد التحميلات الرئيسي للهاتف
-HITS_FILE_PATH = "/sdcard/Download/hits.txt"
+# ─────────────────────────────────────────────
+#  قائمة الذاكرة المشتركة لحفظ الـ HITS مؤقتاً أثناء تشغيل التطبيق
+# ─────────────────────────────────────────────
+SHARED_HITS_MEMORY = []
 
 # ─────────────────────────────────────────────
 #  KV Layout Design
@@ -90,7 +92,7 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "IPTV MAC Scanner PRO v4.8"
+            title: "IPTV MAC Scanner PRO v5.5"
             md_bg_color: app.theme_cls.primary_color
 
         MDScrollView:
@@ -134,7 +136,7 @@ KV = """
                     md_bg_color: app.theme_cls.bg_dark
 
                     MDLabel:
-                        text: "STALKER PROTOCOL SETUP"
+                        text: "RANDOM STALKER PROTOCOL SETUP"
                         bold: True
                         size_hint_y: None
                         height: dp(25)
@@ -158,15 +160,17 @@ KV = """
 
                         MDTextField:
                             id: hex_start
-                            hint_text: "Hex Start"
+                            hint_text: "Hex Start (Locked to Full)"
                             text: "000000"
                             mode: "rectangle"
+                            disabled: True
 
                         MDTextField:
                             id: hex_end
-                            hint_text: "Hex End"
-                            text: "000FFF"
+                            hint_text: "Hex End (Locked to Full)"
+                            text: "FFFFFF"
                             mode: "rectangle"
+                            disabled: True
 
                     MDBoxLayout:
                         spacing: dp(10)
@@ -176,7 +180,7 @@ KV = """
                         MDTextField:
                             id: threads
                             hint_text: "THREADS"
-                            text: "20"
+                            text: "30"
                             mode: "rectangle"
                             input_filter: "int"
 
@@ -272,9 +276,9 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "Captured Active HITS"
+            title: "Captured Active HITS (RAM History)"
             md_bg_color: app.theme_cls.primary_color
-            right_action_items: [["refresh", lambda x: root.load_hits_history()], ["delete-sweep", lambda x: root.clear_hits_file()]]
+            right_action_items: [["refresh", lambda x: root.load_hits_history()], ["delete-sweep", lambda x: root.clear_hits_memory()]]
 
         MDScrollView:
             do_scroll_x: False
@@ -319,17 +323,15 @@ class DashboardScreen(MDScreen):
             self.status = "[!] STATUS: URL IS REQUIRED"
             return
 
-        try:
-            self.start_hex = int(self.ids.hex_start.text, 16)
-            self.end_hex = int(self.ids.hex_end.text, 16)
-            self._batch_size = max(self.end_hex - self.start_hex + 1, 1)
-        except ValueError:
-            self.start_hex = 0
-            self.end_hex = 1000
-            self._batch_size = 1000
+        self._batch_size = 16777216
+        
+        self.m = 16777216
+        self.a = 5
+        self.c = 12345
+        self.current_state = random.randint(0, self.m - 1)
 
         self.running = True
-        self.status = "[>] STATUS: ENGINE RUNNING"
+        self.status = "[>] STATUS: ENGINE RUNNING (RAM MODE)"
         self.ids.btn_start.disabled = True
         self.ids.btn_stop.disabled = False
         self.ids.log_container.clear_widgets()
@@ -338,13 +340,13 @@ class DashboardScreen(MDScreen):
         self.hits = 0
         self.errors_count = 0
 
-        self.thread_count = int(self.ids.threads.text or 20)
+        self.thread_count = int(self.ids.threads.text or 30)
         self.timeout_val = float(self.ids.timeout.text or 4.0)
 
         self.ui_queue = Queue()
-        Clock.schedule_interval(self.consume_ui_queue, 0.5)
+        Clock.schedule_interval(self.consume_ui_queue, 0.4)
 
-        self.add_log_to_ui("Core", "Isolated Network Core Initialized Safely.", "info")
+        self.add_log_to_ui("Core", "Pure Random RAM Engine Initialized Safely.", "info")
         threading.Thread(target=self.run_scanner_engine, args=(base_url,), daemon=True).start()
 
     def on_stop_pressed(self):
@@ -374,12 +376,12 @@ class DashboardScreen(MDScreen):
 
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=self.thread_count) as executor:
-            current_val = self.start_hex
-            while self.running and current_val <= self.end_hex:
-                mac = self.build_mac(current_val)
+            while self.running and self.total < self._batch_size:
+                self.current_state = (self.a * self.current_state + self.c) % self.m
+                mac = self.build_mac(self.current_state)
+                
                 executor.submit(self.check_single_mag_flow, session, portal, mac, headers)
-                current_val += 1
-                time.sleep(0.015)
+                time.sleep(0.01)
 
     def check_single_mag_flow(self, session, portal, mac, headers):
         if not self.running:
@@ -464,19 +466,18 @@ class DashboardScreen(MDScreen):
                 if level == "HIT":
                     self.hits += 1
                     self.add_log_to_ui("HIT", f"{mac} -> {extra}", "success")
-                    try:
-                        # يتم الحفظ الآن في مسار الـ Download العام المباشر
-                        with open(HITS_FILE_PATH, "a") as f:
-                            f.write(f"HIT: {mac} | {extra} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    except:
-                        pass
+                    
+                    # حفظ مباشر داخل المصفوفة البرمجية المشتركة في الذاكرة (بدون إنشاء ملفات)
+                    formatted_hit = f"HIT: {mac} | {extra} | {datetime.datetime.now().strftime('%H:%M:%S')}"
+                    SHARED_HITS_MEMORY.append(formatted_hit)
+                    
                 elif level == "ERROR":
                     self.errors_count += 1
-                    if self.total % 6 == 0: 
+                    if self.total % 10 == 0: 
                         self.add_log_to_ui("ERR", "Gateway Timeout / Socket Refused", "error")
                 else:
-                    if self.total % 10 == 0:
-                        self.add_log_to_ui("TRY", mac, "dim")
+                    if self.total % 25 == 0:
+                        self.add_log_to_ui("RAND", mac, "dim")
                     
                 has_updates = True
 
@@ -487,7 +488,7 @@ class DashboardScreen(MDScreen):
             
             pct = min(int((self.total / self._batch_size) * 100), 100)
             self.progress = pct
-            self.progress_text = f"{self.total} / {self._batch_size} ({pct}%)"
+            self.progress_text = f"{self.total} / {self._batch_size}"
             
             if self.total >= self._batch_size:
                 self.on_stop_pressed()
@@ -525,7 +526,7 @@ class DashboardScreen(MDScreen):
 
 
 # ─────────────────────────────────────────────
-#  Settings / History Screen Logic
+#  Settings / History Screen Logic (RAM Rendering)
 # ─────────────────────────────────────────────
 class SettingsScreen(MDScreen):
     def on_enter(self):
@@ -535,33 +536,20 @@ class SettingsScreen(MDScreen):
         container = self.ids.hits_list_container
         container.clear_widgets()
 
-        # قراءة الملف من مسار الـ Download العام لعرضه في الواجهة
-        if not os.path.exists(HITS_FILE_PATH):
+        # قراءة مباشرة من مصفوفة الذاكرة دون استدعاء نظام الملفات نهائياً
+        if not SHARED_HITS_MEMORY:
             container.add_widget(OneLineListItem(text="No HITS captured yet."))
             return
 
-        try:
-            with open(HITS_FILE_PATH, "r") as f:
-                lines = f.readlines()
-            
-            if not lines:
-                container.add_widget(OneLineListItem(text="No HITS captured yet."))
-                return
+        # عرض الـ HITS من الأحدث إلى الأقدم لقراءة سهلة ومريحة
+        for hit in reversed(SHARED_HITS_MEMORY):
+            item = OneLineListItem(text=hit)
+            container.add_widget(item)
 
-            for line in reversed(lines):
-                if line.strip():
-                    item = OneLineListItem(text=line.strip())
-                    container.add_widget(item)
-        except Exception as e:
-            container.add_widget(OneLineListItem(text=f"Error reading history: {str(e)}"))
-
-    def clear_hits_file(self):
-        try:
-            if os.path.exists(HITS_FILE_PATH):
-                os.remove(HITS_FILE_PATH)
-            self.load_hits_history()
-        except:
-            pass
+    def clear_hits_memory(self):
+        # مسح القائمة من الذاكرة المؤقتة بالكامل
+        SHARED_HITS_MEMORY.clear()
+        self.load_hits_history()
 
 
 class MainApp(MDApp):
