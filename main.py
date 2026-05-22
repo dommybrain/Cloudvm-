@@ -1,7 +1,7 @@
 """
-Professional Stalker Middleware MAC Scanner PRO (Flash Engine v4.6)
+Professional Stalker Middleware MAC Scanner PRO (Flash Engine v4.8)
 Fully Optimized for: KivyMD 1.2.0 + Kivy 2.3.x (Pydroid3 / Android)
-Fixed: Dynamic Hits History rendering in the History Panel.
+Fixed: Storage path redirected to shared '/sdcard/Download/hits.txt' for easy access.
 """
 
 from kivymd.app import MDApp
@@ -33,6 +33,9 @@ from queue import Queue
 
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# توجيه مسار الحفظ والدخول المشترك إلى مجلد التحميلات الرئيسي للهاتف
+HITS_FILE_PATH = "/sdcard/Download/hits.txt"
 
 # ─────────────────────────────────────────────
 #  KV Layout Design
@@ -87,7 +90,7 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "IPTV MAC Scanner PRO v4.6"
+            title: "IPTV MAC Scanner PRO v4.8"
             md_bg_color: app.theme_cls.primary_color
 
         MDScrollView:
@@ -462,7 +465,8 @@ class DashboardScreen(MDScreen):
                     self.hits += 1
                     self.add_log_to_ui("HIT", f"{mac} -> {extra}", "success")
                     try:
-                        with open("hits.txt", "a") as f:
+                        # يتم الحفظ الآن في مسار الـ Download العام المباشر
+                        with open(HITS_FILE_PATH, "a") as f:
                             f.write(f"HIT: {mac} | {extra} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     except:
                         pass
@@ -521,30 +525,29 @@ class DashboardScreen(MDScreen):
 
 
 # ─────────────────────────────────────────────
-#  Settings / History Screen Logic (تحديث ديناميكي كامل للـ HITS)
+#  Settings / History Screen Logic
 # ─────────────────────────────────────────────
 class SettingsScreen(MDScreen):
     def on_enter(self):
-        # يتم استدعاء الدالة تلقائياً وتحديث الواجهة بمجرد ضغط المستخدم على تبويب History
         self.load_hits_history()
 
     def load_hits_history(self):
         container = self.ids.hits_list_container
         container.clear_widgets()
 
-        if not os.path.exists("hits.txt"):
+        # قراءة الملف من مسار الـ Download العام لعرضه في الواجهة
+        if not os.path.exists(HITS_FILE_PATH):
             container.add_widget(OneLineListItem(text="No HITS captured yet."))
             return
 
         try:
-            with open("hits.txt", "r") as f:
+            with open(HITS_FILE_PATH, "r") as f:
                 lines = f.readlines()
             
             if not lines:
                 container.add_widget(OneLineListItem(text="No HITS captured yet."))
                 return
 
-            # عرض الحسابات الناجحة من الأحدث إلى الأقدم لقراءة مريحة
             for line in reversed(lines):
                 if line.strip():
                     item = OneLineListItem(text=line.strip())
@@ -553,10 +556,9 @@ class SettingsScreen(MDScreen):
             container.add_widget(OneLineListItem(text=f"Error reading history: {str(e)}"))
 
     def clear_hits_file(self):
-        # دالة لمسح ملف hits.txt لتنظيف مساحة التخزين عند الحاجة
         try:
-            if os.path.exists("hits.txt"):
-                os.remove("hits.txt")
+            if os.path.exists(HITS_FILE_PATH):
+                os.remove(HITS_FILE_PATH)
             self.load_hits_history()
         except:
             pass
