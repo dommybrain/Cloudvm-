@@ -1,7 +1,8 @@
 """
-Professional Stalker Middleware MAC Scanner PRO (Unified Master Engine v11.0)
+Professional Stalker Middleware MAC Scanner PRO (Unified Master Engine v13.0)
 Fully Restored: Premium UI v7.0 Layout
-Fully Integrated: Direct-Storage Pipeline v9.0 + Expiry Date Extraction
+Fixed: Android API 33 Public /Download Path Access Permissions
+Added: Smart Expiry Date extraction from profile response
 """
 
 from kivymd.app import MDApp
@@ -19,6 +20,7 @@ from kivy.clock import Clock
 from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ListProperty
 from kivy.utils import get_color_from_hex
 from kivy.core.clipboard import Clipboard
+from kivy.utils import platform
 
 import threading
 import requests
@@ -31,8 +33,14 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 🌟 المسار الأبسط والأضمن في أندرويد لعدم ضياع أي ملف
-SAVE_PATH = "/storage/emulated/0/Download/stalker_hits.txt"
+# ─────────────────────────────────────────────
+# تحديد مسار الحفظ الذكي المتوافق مع أندرويد وبي سي
+# ─────────────────────────────────────────────
+if platform == "android":
+    # استخدام المسار المشترك والمسموح به برمجياً في أندرويد الحديث دون قيود النطاق
+    SAVE_PATH = "/storage/emulated/0/Download/stalker_hits.txt"
+else:
+    SAVE_PATH = "stalker_hits.txt"
 
 # ─────────────────────────────────────────────
 #  KV Layout Design (واجهتك الاحترافية كاملة بدون أي نقصان)
@@ -87,7 +95,7 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "IPTV MAC Scanner PRO v11.0"
+            title: "IPTV MAC Scanner PRO v13.0"
             md_bg_color: app.theme_cls.primary_color
 
         MDScrollView:
@@ -316,8 +324,19 @@ class DashboardScreen(MDScreen):
 
     MAX_LOG_ITEMS = 20
 
+    def check_android_permissions(self):
+        """طلب صلاحيات التخزين البرمجية الحية الخاصة بنظام أندرويد لتفادي الـ Permission Denied"""
+        if platform == "android":
+            try:
+                from android.permissions import request_permissions, Permission
+                request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
+            except Exception as e:
+                self.add_log_to_ui("Core", f"Permission Request Skipped: {str(e)}", "warn")
+
     def start_scan(self):
         if self.running: return
+        self.check_android_permissions()  # طلب الصلاحية فوراً عند الضغط
+        
         self.running = True
         self.status = "[>] STATUS: ENGINE RUNNING"
         self.ids.btn_start.disabled = True
@@ -332,7 +351,7 @@ class DashboardScreen(MDScreen):
         self.thread_count = int(self.ids.threads.text or 30)
         self.timeout_val = float(self.ids.timeout.text or 4.0)
 
-        self.add_log_to_ui("Core", f"Direct Engine Active. Path: {SAVE_PATH}", "info")
+        self.add_log_to_ui("Core", f"Engine Active. Output: {SAVE_PATH}", "info")
         threading.Thread(target=self.run_scanner_engine, daemon=True).start()
 
     def stop_scan(self):
@@ -340,7 +359,7 @@ class DashboardScreen(MDScreen):
         self.status = "[-] STATUS: STOPPED"
         self.ids.btn_start.disabled = False
         self.ids.btn_stop.disabled = True
-        self.add_log_to_ui("Core", "Engine Suspended. File Saved Safely.", "warn")
+        self.add_log_to_ui("Core", "Engine Suspended. File Sync Safe.", "warn")
 
     def run_scanner_engine(self):
         base_url = self.ids.target_url.text.strip()
@@ -375,19 +394,24 @@ class DashboardScreen(MDScreen):
                 if res2.status_code == 200 and ("parent_password" in res2.text.lower() or "expiry" in res2.text.lower()):
                     self.hits += 1
                     
-                    # 🔍 استخراج تاريخ الانتهاء من الـ profile info بشكل ذكي وتلقائي
-                    expiry_date = "Unlimited/Active"
+                    # 🔍 استخراج تاريخ الانتهاء من الـ profile info بشكل تلقائي
+                    expiry_date = "Active Account"
                     match = re.search(r'"expiry"\s*:\s*"([^"]+)"', res2.text, re.IGNORECASE)
                     if match:
                         expiry_date = match.group(1).strip()
                     else:
-                        # محاولة ثانية في حال كان مسمى الحقل مختلفاً في بعض البورتالات
                         match2 = re.search(r'"end_date"\s*:\s*"([^"]+)"', res2.text, re.IGNORECASE)
                         if match2: expiry_date = match2.group(1).strip()
                     
-                    # 🌟 حفظ فوري بداخل الـ Thread مع حقل تاريخ الانتهاء المستخرج
-                    with open(SAVE_PATH, "a") as f:
-                        f.write(f"HIT: {mac} | Exp: {expiry_date} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    # 🌟 محاولة الكتابة الآمنة مع تجاوز الحظر البرمجي لأندرويد
+                    try:
+                        with open(SAVE_PATH, "a") as f:
+                            f.write(f"HIT: {mac} | Exp: {expiry_date} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    except Exception as storage_err:
+                        # إذا كان هناك حظر عام، نقوم بحفظ نسخة احتياطية في الـ Sandbox الداخلي لكي لا يضيع أي HIT
+                        alt_path = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+                        with open(alt_path, "a") as f:
+                            f.write(f"HIT: {mac} | Exp: {expiry_date} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     
                     Clock.schedule_once(lambda dt: self.update_ui_counters(mac, f"HIT|{expiry_date}"))
                 else:
@@ -406,12 +430,10 @@ class DashboardScreen(MDScreen):
         self.success_hits = str(self.hits)
         self.errors = str(self.errors_count)
         
-        # تحديث شريط التقدم للبرنامج
         pct = min(int((self.total / self._batch_size) * 100), 100)
         self.progress = pct
         self.progress_text = f"{self.total} / {self._batch_size}"
 
-        # طباعة السجلات الحية داخل الكونسول
         if mode.startswith("HIT"):
             exp = mode.split("|")[1]
             self.add_log_to_ui("REAL_HIT", f"{mac} -> Exp: {exp}", "success")
@@ -450,12 +472,17 @@ class SettingsScreen(MDScreen):
 
     def load_hits_from_file(self):
         viewer = self.ids.text_viewer_label
-        if not os.path.exists(SAVE_PATH):
-            viewer.text = "No HITS captured yet."
-            return
+        
+        # قراءة الملف الأساسي أو الاحتياطي بشكل ذكي وتجنب الأخطاء
+        target = SAVE_PATH
+        if not os.path.exists(target):
+            target = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+            if not os.path.exists(target):
+                viewer.text = "No HITS captured yet."
+                return
 
         try:
-            with open(SAVE_PATH, "r") as f:
+            with open(target, "r") as f:
                 content = f.read().strip()
             if not content:
                 viewer.text = "No HITS captured yet."
@@ -470,12 +497,16 @@ class SettingsScreen(MDScreen):
                     styled_text += f"{line}\n\n"
             viewer.text = styled_text
         except Exception as e:
-            viewer.text = f"Error reading storage file: {str(e)}"
+            viewer.text = f"Storage View Locked by Android. Use 'Copy All' button above. Detail: {str(e)}"
 
     def copy_all_hits(self):
-        if os.path.exists(SAVE_PATH):
+        target = SAVE_PATH
+        if not os.path.exists(target):
+            target = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+        
+        if os.path.exists(target):
             try:
-                with open(SAVE_PATH, "r") as f:
+                with open(target, "r") as f:
                     content = f.read().strip()
                 if content: Clipboard.copy(content)
             except: pass
@@ -483,6 +514,8 @@ class SettingsScreen(MDScreen):
     def clear_hits_file(self):
         try:
             if os.path.exists(SAVE_PATH): os.remove(SAVE_PATH)
+            alt = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+            if os.path.exists(alt): os.remove(alt)
             self.load_hits_from_file()
         except: pass
 
