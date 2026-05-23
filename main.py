@@ -1,7 +1,7 @@
 """
-Professional Stalker Middleware MAC Scanner PRO (Unified Master Engine v13.0)
+Professional Stalker Middleware MAC Scanner PRO (Unified Master Engine v14.0)
 Fully Restored: Premium UI v7.0 Layout
-Fixed: Android API 33 Public /Download Path Access Permissions
+Fixed: Android 13 (API 33) Native /Download Path via Android Environment API
 Added: Smart Expiry Date extraction from profile response
 """
 
@@ -34,13 +34,22 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ─────────────────────────────────────────────
-# تحديد مسار الحفظ الذكي المتوافق مع أندرويد وبي سي
+#  تحديد مسار الحفظ المتوافق مع أندرويد 13 (API 33) بشكل قانوني
 # ─────────────────────────────────────────────
-if platform == "android":
-    # استخدام المسار المشترك والمسموح به برمجياً في أندرويد الحديث دون قيود النطاق
-    SAVE_PATH = "/storage/emulated/0/Download/stalker_hits.txt"
-else:
-    SAVE_PATH = "stalker_hits.txt"
+def get_save_path():
+    if platform == "android":
+        try:
+            # استدعاء جافا أندرويد لجلب مجلد التنزيلات العام بدون الحاجة للصلاحيات الملغية
+            from jnius import autoclass
+            Environment = autoclass('android.os.Environment')
+            download_dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath()
+            return os.path.join(download_dir, "stalker_hits.txt")
+        except Exception:
+            # مسار احتياطي مباشر في حال فشل الاستدعاء
+            return "/storage/emulated/0/Download/stalker_hits.txt"
+    return "stalker_hits.txt"
+
+SAVE_PATH = get_save_path()
 
 # ─────────────────────────────────────────────
 #  KV Layout Design (واجهتك الاحترافية كاملة بدون أي نقصان)
@@ -95,7 +104,7 @@ KV = """
         orientation: "vertical"
 
         MDTopAppBar:
-            title: "IPTV MAC Scanner PRO v13.0"
+            title: "IPTV MAC Scanner PRO v14.0"
             md_bg_color: app.theme_cls.primary_color
 
         MDScrollView:
@@ -324,19 +333,8 @@ class DashboardScreen(MDScreen):
 
     MAX_LOG_ITEMS = 20
 
-    def check_android_permissions(self):
-        """طلب صلاحيات التخزين البرمجية الحية الخاصة بنظام أندرويد لتفادي الـ Permission Denied"""
-        if platform == "android":
-            try:
-                from android.permissions import request_permissions, Permission
-                request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
-            except Exception as e:
-                self.add_log_to_ui("Core", f"Permission Request Skipped: {str(e)}", "warn")
-
     def start_scan(self):
         if self.running: return
-        self.check_android_permissions()  # طلب الصلاحية فوراً عند الضغط
-        
         self.running = True
         self.status = "[>] STATUS: ENGINE RUNNING"
         self.ids.btn_start.disabled = True
@@ -351,7 +349,7 @@ class DashboardScreen(MDScreen):
         self.thread_count = int(self.ids.threads.text or 30)
         self.timeout_val = float(self.ids.timeout.text or 4.0)
 
-        self.add_log_to_ui("Core", f"Engine Active. Output: {SAVE_PATH}", "info")
+        self.add_log_to_ui("Core", f"Engine Active. Saving to: Download/", "info")
         threading.Thread(target=self.run_scanner_engine, daemon=True).start()
 
     def stop_scan(self):
@@ -359,7 +357,7 @@ class DashboardScreen(MDScreen):
         self.status = "[-] STATUS: STOPPED"
         self.ids.btn_start.disabled = False
         self.ids.btn_stop.disabled = True
-        self.add_log_to_ui("Core", "Engine Suspended. File Sync Safe.", "warn")
+        self.add_log_to_ui("Core", "Engine Suspended. File Sync Complete.", "warn")
 
     def run_scanner_engine(self):
         base_url = self.ids.target_url.text.strip()
@@ -403,13 +401,13 @@ class DashboardScreen(MDScreen):
                         match2 = re.search(r'"end_date"\s*:\s*"([^"]+)"', res2.text, re.IGNORECASE)
                         if match2: expiry_date = match2.group(1).strip()
                     
-                    # 🌟 محاولة الكتابة الآمنة مع تجاوز الحظر البرمجي لأندرويد
+                    # 🌟 حفظ آمن في ملف الـ Download العام المتوافق مع API 33
                     try:
                         with open(SAVE_PATH, "a") as f:
                             f.write(f"HIT: {mac} | Exp: {expiry_date} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                    except Exception as storage_err:
-                        # إذا كان هناك حظر عام، نقوم بحفظ نسخة احتياطية في الـ Sandbox الداخلي لكي لا يضيع أي HIT
-                        alt_path = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+                    except Exception:
+                        # حماية إضافية: إذا قفل أندرويد المسار العام تماماً، يتم التخزين بالمعزل الداخلي فوراً لكي لا تضيع النتائج
+                        alt_path = os.path.join(MDApp.get_running_app().user_data_dir, "stalker_hits.txt")
                         with open(alt_path, "a") as f:
                             f.write(f"HIT: {mac} | Exp: {expiry_date} | {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                     
@@ -473,10 +471,9 @@ class SettingsScreen(MDScreen):
     def load_hits_from_file(self):
         viewer = self.ids.text_viewer_label
         
-        # قراءة الملف الأساسي أو الاحتياطي بشكل ذكي وتجنب الأخطاء
         target = SAVE_PATH
         if not os.path.exists(target):
-            target = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+            target = os.path.join(MDApp.get_running_app().user_data_dir, "stalker_hits.txt")
             if not os.path.exists(target):
                 viewer.text = "No HITS captured yet."
                 return
@@ -497,12 +494,12 @@ class SettingsScreen(MDScreen):
                     styled_text += f"{line}\n\n"
             viewer.text = styled_text
         except Exception as e:
-            viewer.text = f"Storage View Locked by Android. Use 'Copy All' button above. Detail: {str(e)}"
+            viewer.text = f"Android Sandbox Lock Active. Use 'Copy All' button above. Details: {str(e)}"
 
     def copy_all_hits(self):
         target = SAVE_PATH
         if not os.path.exists(target):
-            target = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+            target = os.path.join(MDApp.get_running_app().user_data_dir, "stalker_hits.txt")
         
         if os.path.exists(target):
             try:
@@ -514,7 +511,7 @@ class SettingsScreen(MDScreen):
     def clear_hits_file(self):
         try:
             if os.path.exists(SAVE_PATH): os.remove(SAVE_PATH)
-            alt = os.path.join(MDApp.get_running_app().user_data_dir, "backup_hits.txt")
+            alt = os.path.join(MDApp.get_running_app().user_data_dir, "stalker_hits.txt")
             if os.path.exists(alt): os.remove(alt)
             self.load_hits_from_file()
         except: pass
