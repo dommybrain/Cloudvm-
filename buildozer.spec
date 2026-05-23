@@ -14,7 +14,7 @@ orientation = portrait
 
 fullscreen = 0
 
-android.permissions = INTERNET,ACCESS_NETWORK_STATE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE ,READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE
 
 android.api = 33
 android.minapi = 21
